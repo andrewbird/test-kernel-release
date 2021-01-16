@@ -1,0 +1,66 @@
+on:
+  push:
+    tags:
+    - 'ke*.*'
+
+name: Release
+
+jobs:
+
+  makerelease:
+    runs-on: ubuntu-20.04
+    steps:
+
+    - uses: actions/checkout@v2
+
+    - name: Get tag name
+      id: vars
+      run: |
+        echo "::set-output name=ref::$(echo ${{ github.ref }} | sed -e's,.*/,,')"
+
+    - name: Package install
+      run: |
+        sudo add-apt-repository ppa:tkchia/build-ia16
+        sudo apt update
+        sudo apt install gcc-ia16-elf nasm upx
+
+    - name: Build
+      run: ./ci_build.sh
+
+    - name: Test
+      run: ./ci_test.sh
+
+    - name: Upload artefact
+      if: github.repository == 'andrewbird/test-kernel-release'
+      uses: actions/upload-artifact@v2
+      with:
+        name: ${{ steps.vars.outputs.ref }}-bin
+        path: _output/K*.???
+
+    - name: Download artefact
+      uses: actions/download-artifact@v2
+      with:
+        name: ${{ steps.vars.outputs.ref }}-bin
+
+    - name: Create release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ${{ steps.vars.outputs.ref }}
+        body: "[**Release Notes:**](https://github.com/andrewbird/test-kernel-release/blob/master/RELEASE_NOTES)"
+        draft: false
+        prerelease: false
+
+    - name: Upload release asset
+      if: github.repository == 'andrewbird/test-kernel-release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ steps.vars.outputs.ref }}-bin.zip
+        asset_name: ${{ steps.vars.outputs.ref }}-bin.zip
+        asset_content_type: application/zip
