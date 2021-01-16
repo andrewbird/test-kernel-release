@@ -1,0 +1,57 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'ke[0-9]+'
+
+jobs:
+
+  makerelease:
+    runs-on: ubuntu-20.04
+    steps:
+
+    - uses: actions/checkout@v2
+
+    - name: Get tag name
+      id: vars
+      run: |
+        echo "::set-output name=tag::${GITHUB_REF#refs/*/}"
+
+    - name: Package install
+      run: |
+        sudo add-apt-repository ppa:tkchia/build-ia16
+        sudo apt update
+        sudo apt install gcc-ia16-elf nasm upx
+
+    - name: Build
+      run: ./ci_build.sh
+
+    - name: Test
+      run: ./ci_test.sh
+
+    - name: Create binary zipfile
+      run: |
+              zip --junk-paths ${{ steps.vars.outputs.tag }}-bin.zip _output/K*.???
+
+    - name: Create release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ${{ steps.vars.outputs.tag }}
+        body_path: RELEASE_NOTES.md
+        draft: false
+        prerelease: false
+
+    - name: Upload release asset
+      if: github.repository == 'andrewbird/test-kernel-release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_name: 'Binaries(zip)'
+        asset_path: ${{ steps.vars.outputs.tag }}-bin.zip
+        asset_content_type: application/zip
